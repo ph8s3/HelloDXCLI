@@ -8,21 +8,11 @@ using Autodesk.DataExchange.DataModels;
 using Autodesk.DataExchange.Extensions.HostingProvider;
 using Autodesk.DataExchange.Extensions.Logging.File;
 using Autodesk.DataExchange.Models;
-using Autodesk.DataExchange.Schemas.Models;
-using Autodesk.Forge.Model;
 using Autodesk.Parameters;
-using Google.Protobuf.WellKnownTypes;
-using Newtonsoft.Json.Linq;
-using RestSharp;
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
 using System.IO;
-using System.Linq;
 using System.Reflection;
-using System.Runtime.ConstrainedExecution;
-using System.Text;
 using System.Threading.Tasks;
 using PrimitiveGeometry = Autodesk.GeometryPrimitives;
 
@@ -178,7 +168,6 @@ namespace HelloDXCLI
             // Init the client.
             _ = Client;
             await SendAnExchange();
-            //await SendAFewExchangesInARow();
         }
         
         private static async Task SendAnExchange()
@@ -192,39 +181,7 @@ namespace HelloDXCLI
             
             await SendDataExchange(exchangeConfig);
         }
-        // TODO: Create multiple workspaces for each SDK instance.
-        private static async Task SendAFewExchangesInARow()
-        {
-            foreach(KeyValuePair<string, ExchangeConfig> pair in sampleModels)
-            {
-                string key = pair.Key;
-                ExchangeConfig exchangeConfig = pair.Value;
-                Console.WriteLine("<================================");
-                Console.WriteLine("Will send {0}=>{1} sample", key, exchangeConfig.GeometryfileName);
-                await SendDataExchange(exchangeConfig);
-                await Task.Delay(333);
-            }
-        }
 
-        // This will NOT work!
-        private static async Task __SendAFewExchangesAtOnce()
-        {
-            var tasks = new List<Task>();
-            Task taskIFC = Task.Run(() => SendDataExchange(sampleBeamModel));
-            Task taskObj = Task.Run(() => SendDataExchange(sampleWarehouseModel));
-            Task taskStp = Task.Run(() => SendDataExchange(sampleBoxModel));
-
-            tasks.Add(Task.Factory.StartNew(() => taskIFC));
-            tasks.Add(Task.Factory.StartNew(() => taskObj));
-            tasks.Add(Task.Factory.StartNew(() => taskStp));
-
-            //tasks.Add(taskIFC);
-            //tasks.Add(taskObj);
-            //tasks.Add(taskStp);
-            await Task.WhenAll(tasks);
-
-            Console.WriteLine("all tasks done================");
-        }
         // Randomly pick a 3D model in the sampleModel folder and send to an Exchange.
         private static async Task SendDataExchange(ExchangeConfig exchangeConfig)
         {
@@ -257,7 +214,9 @@ namespace HelloDXCLI
                 FileName = exchangeName,
                 Description = string.Empty,
                 ACCFolderURN = AppConfig.FolderUrn,
-                ACCProjectURN = AppConfig.ProjectUrn,
+                ProjectId = AppConfig.ProjectUrn,
+                HubId = AppConfig.HubUrn,
+                Region = AppConfig.Region,
             };
 
             var exchangeDetails = await Client.CreateExchangeAsync(exchangeCreateRequest);
@@ -268,11 +227,7 @@ namespace HelloDXCLI
                 CollectionId = exchangeDetails.CollectionID,
                 ExchangeId = exchangeDetails.ExchangeID,
                 HubId = exchangeDetails.HubId,
-                //HubId = AppConfig.HubUrn,
-                Region = exchangeDetails.HubRegion,
-                //Region = AppConfig.Region,
             };
-
             return (exchangeIdentifier, exchangeDetails);
         }
 
@@ -284,7 +239,7 @@ namespace HelloDXCLI
 
             // Create a Revit element.
             var element = revitExchangeData.AddElement(new ElementProperties(Guid.NewGuid().ToString(), exchangeConfig.RevitCategory, exchangeConfig.RevitFamily, exchangeConfig.RevitFamilyType));
-
+            element.Name = "Beam 1";
             // Get geometry for the element. In this example, we are using canned files resides at "SampleModels" folder. As of writing,.OBJ, .IFC, and/or .STP files are supported.
             // Geometry primitives such as points, lines, polylines are supported: handy for drawing 2D plans or abstract representation of your detailed geometry
             var geometryFilePath = exchangeConfig.GeometryFilePath;
@@ -292,26 +247,25 @@ namespace HelloDXCLI
             var elementGeometries = new List<ElementGeometry> { geometry };
             revitExchangeData.SetElementGeometryByElement(element, elementGeometries);
 
-            // Create a Forge built-in parameter (Phase) for the element (instance):
-            // You can verify that the instance parameter has been created using Data Exchange Model Explorer at https://aps-dx-explorer.autodesk.io/
+            // Create a Forge built-in parameterPhase (Phase) for the element (instance):
+            // You can verify that the instance parameterPhase has been created using Data Exchange Model Explorer at https://aps-dx-explorer.autodesk.io/
             // And select the instance
-            var parameter = ParameterDefinition.Create(Autodesk.Parameters.Parameter.PhaseCreated, ParameterDataType.String);
-            parameter.IsTypeParameter = false; // instance parameter
-            ((StringParameterDefinition)parameter).Value = "Phase 2";
-            element.CreateParameter(parameter);
+            ParameterDefinition parameterPhase = ParameterDefinition.Create(Autodesk.Parameters.Parameter.PhaseCreated, ParameterDataType.String);
+            parameterPhase.IsTypeParameter = false; // instance parameterPhase
+            ((StringParameterDefinition)parameterPhase).Value = "Phase 2";
+            await element.CreateParameterAsync(parameterPhase);
 
-            // Create a custom parameter of the element.
+            // Create a custom parameterPhase of the element.
             var SchemaId = "exchange.parameter." + exchangeDetails.SchemaNamespace + ":String" + "EUFireRating" + "TestCustomParameter-1.0.0";
-            ParameterDefinition CustomParameter = ParameterDefinition.Create(SchemaId, ParameterDataType.String);
-            CustomParameter.Name = "FireRating" + Guid.NewGuid();
-            CustomParameter.SampleText = "A fire rating class";
-            CustomParameter.Description = "Fire rating provided by manufacturer";
-            CustomParameter.ReadOnly = false;
-            CustomParameter.IsTypeParameter = false;
-            CustomParameter.GroupID = Group.General.DisplayName();
-            //CustomParameter.SpecID = Spec.Number.DisplayName();
-            ((StringParameterDefinition)CustomParameter).Value = "A1";
-            element.CreateParameter(CustomParameter);
+            ParameterDefinition parameterFireRating = ParameterDefinition.Create(SchemaId, ParameterDataType.String);
+            parameterFireRating.Name = "FireRating" + Guid.NewGuid();
+            parameterFireRating.SampleText = "A fire rating class";
+            parameterFireRating.Description = "Fire rating provided by manufacturer";
+            parameterFireRating.ReadOnly = false;
+            parameterFireRating.IsTypeParameter = false;
+            parameterFireRating.GroupID = Group.General.DisplayName();
+            ((StringParameterDefinition)parameterFireRating).Value = "A1";
+            await element.CreateParameterAsync(parameterFireRating);
 
             return revitExchangeData.ExchangeData;
         }
@@ -349,8 +303,13 @@ namespace HelloDXCLI
         private static async Task PublishExchangeData(DataExchangeIdentifier dataExchangeIdentifier, ExchangeDetails exchangeDetails, ExchangeData exchangeData)
         {
             await Client.SyncExchangeDataAsync(dataExchangeIdentifier, exchangeData);
-            await Client.GenerateViewableAsync(exchangeDetails.DisplayName, exchangeDetails.ExchangeID,
-                exchangeDetails.CollectionID, exchangeDetails.FileUrn);
+            //// Exception: Autodesk.DataExchange.OpenAPI.ApiException`1: 'The request is invalid. Status: 400 Response:
+            await Client.GenerateViewableAsync(
+                //exchangeDetails.DisplayName, 
+                exchangeDetails.ExchangeID,
+                exchangeDetails.CollectionID
+                //exchangeDetails.FileUrn
+                );
         }
         // Utility 
         static string UrlToExchange(ExchangeDetails exchangeDetails)
