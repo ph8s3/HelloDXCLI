@@ -1,0 +1,39 @@
+﻿query getAll($exchangeId: ID!) {
+  exchange(exchangeId: $exchangeId) {
+    id
+    name
+    propertyDefinitions {
+      results {
+        name
+        id
+        specification
+      }
+    }
+    elements {
+      results {
+        id
+        name
+        references {
+          results {
+            name
+            value {
+              id
+              properties {
+                results {
+                  name
+                  value
+                }
+              }
+            }
+          }
+        }
+        properties{
+          results {
+            name
+            value
+          }
+        }
+      }
+    }
+  }
+}
